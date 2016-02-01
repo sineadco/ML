@@ -1,0 +1,111 @@
+---
+title: "JHPractical ML Week 4 Assignment"
+author: "Sinead O'Donovan"
+date: "January 31, 2016"
+output: html_document
+---
+Project Description
+===================
+The goal of your project is to predict the manner in which they did the exercise.This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.In this project, your goal will be to use data from  accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+Prep Environment
+---------------
+The first thing I did was install and load the libraries I will be using
+
+```{r}
+library(caret)
+library(ISLR)
+library(ggplot2)
+```
+Loading Data
+------------
+I next read in the data and also took a look at what the data looks like
+```{r}
+rawdata <- read.csv("pml-training.csv",na.strings=c("NA","","#DIV/0!"), header = TRUE)
+validation <-read.csv("pml-testing.csv",na.strings=c("NA","","#DIV/0!"), header = TRUE)
+```
+Inspect Data 
+------------
+I inspected the data to see how much data prep we need to do, I did change the read.csv to account for the different
+type of NAs. Once I understood the data I commented this out after I ran it but kept the code so I could use it later if needed
+```{r}
+## str(rawdata$classe)
+##str(rawdata)
+## dim(rawdata)
+## dim(validation)
+## summary(validation)
+##names(validation)
+```
+Data Cleansing 
+--------
+I tried running models without removing columns but it took a very long time so I realized I needed to do some data cleansing. 
+I took away the first 7 columns as they didn't contain useful info and columns with only NAs also. This enabled the models to run better.
+```{r}
+rawdata <-rawdata[,-seq(1:7)]
+validation <- validation[,-seq(1:7)]
+indexNA <- as.vector(sapply(rawdata[,1:152],function(x) {length(which(is.na(x)))!=0}))
+rawdata <- rawdata[,!indexNA]
+validation <- validation[,!indexNA]
+```
+Creating Data Sets
+------------------
+I split the data into training and testing data sets. I decided the raw data that I loaded with only 20 values could be a
+cross validation set.
+```{r}
+set.seed(1234)
+inTrain = createDataPartition(rawdata$classe, p=0.7, list=FALSE)
+training = rawdata[inTrain,]
+testing = rawdata[-inTrain,]
+```
+Modeling 
+--------
+I than did different model training and prediction
+first I took a look at boosting to see how its accuracy was. It was .97 approximately. 
+```{r}
+set.seed(1234)
+modgbm <-train(classe ~.,method="gbm",data=training,verbose = F, trControl = trainControl(method = "cv", number=10))
+### plot the accuracy of the test set
+```{r, echo=FALSE}
+plot(modgbm, ylim = c(0.9, 1))
+```
+```{r}
+predgbm <-predict(modgbm, testing)
+### calculate the error rates and accuracies
+sum(predgbm == testing$classe) / length(predgbm)
+confusionMatrix(testing$classe, predgbm)$table
+```
+next I took a look at Random Forest
+```{r}
+### training the models using random forest 
+set.seed(1234)
+modrf <-train(classe ~.,method="rf",data=training,importance=T, trControl=trainControl(method="cv"),number=10)
+predrf <-predict(modrf, testing)
+confusionMatrix(testing$classe, predrf)$table
+```
+Lets plot accuracy
+```{r, echo=FALSE}
+plot(modrf, ylim = c(0.9, 1))
+```
+Calculate the accuracy of the two models to decide best one
+
+```{r}
+## Calculate accuracy
+accrf<-sum(predrf == testing$classe)/length(predrf)
+accgbm<-sum(predgbm == testing$classe)/length(predgbm)
+print(accrf)
+print(accgbm)
+```
+
+You can see that random forest is more accurate.
+
+Final Conclusions
+---------------------
+Because the accuracy rates are higher Random Forest it is the best model so ran this against the validation data to 
+predict the final results
+```{r}
+## final predictions for the validation data
+predrfv <-predict(modrf, validation)
+predrfv
+```
+The final predictions for the validation set and quiz are
+B A B A A E D B A A B C B A E E A B B B, ## Levels: A B C D E
